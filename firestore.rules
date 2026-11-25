@@ -1,0 +1,217 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        request.auth.token.phone_number != null
+      );
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isVerifiedOwner(uid) {
+      return isVerifiedUser() && request.auth.uid == uid;
+    }
+
+    function hasParentUser(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid)) ||
+        existsAfter(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function isValidUserAccount(data, uid) {
+      return data.keys().hasAll(['uid', 'language', 'onboarded', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'language', 'onboarded', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid == uid && data.uid == request.auth.uid
+        && data.language is string && data.language.size() == 2 && (data.language == 'hi' || data.language == 'en')
+        && data.onboarded is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidShopProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'shopName', 'language', 'onboarded', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'shopName', 'ownerName', 'phone', 'language', 'onboarded', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid == uid && data.uid == request.auth.uid
+        && data.shopName is string && data.shopName.size() >= 2 && data.shopName.size() <= 50
+        && (!('ownerName' in data) || (data.ownerName is string && data.ownerName.size() <= 50))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 20 && data.phone.matches('^(\\+?[0-9]{10,15})?$')))
+        && data.language is string && data.language.size() == 2 && (data.language == 'hi' || data.language == 'en')
+        && data.onboarded is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEntryAmount(data) {
+      return (data.amountPaise is int && data.amountPaise > 0 && data.amountPaise <= 10000000000)
+        || (data.type == 'expense' && data.amountPaise == null);
+    }
+
+    function isValidOriginalAIValue(val) {
+      return val is map
+        && val.keys().hasAll(['customerName', 'type', 'amountPaise', 'note'])
+        && val.keys().hasOnly(['customerName', 'type', 'amountPaise', 'note'])
+        && val.customerName is string && val.customerName.size() <= 60
+        && val.type is string && val.type.size() <= 10 && (val.type == 'sale' || val.type == 'expense' || val.type == 'udhaar' || val.type == 'jama')
+        && (val.amountPaise == null || (val.amountPaise is int && val.amountPaise > 0 && val.amountPaise <= 10000000000))
+        && val.note is string && val.note.size() <= 140;
+    }
+
+    function isValidLedgerEntry(data, uid) {
+      return data.keys().hasAll(['ownerUid', 'customerName', 'type', 'amountPaise', 'source', 'status', 'occurredAtIso', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['ownerUid', 'customerName', 'customerPhone', 'type', 'amountPaise', 'note', 'source', 'status', 'occurredAtIso', 'confidence', 'transcript', 'uncertainFields', 'sourceImageUrl', 'confirmedAt', 'editedFields', 'originalAIValue', 'createdAt', 'updatedAt'])
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 && data.ownerUid == uid && data.ownerUid == request.auth.uid
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 60
+        && (!('customerPhone' in data) || (data.customerPhone is string && data.customerPhone.size() <= 20 && data.customerPhone.matches('^(\\+?[0-9]{10,15})?$')))
+        && data.type is string && data.type.size() <= 10 && (data.type == 'sale' || data.type == 'expense' || data.type == 'udhaar' || data.type == 'jama')
+        && isValidEntryAmount(data)
+        && (!('note' in data) || (data.note is string && data.note.size() <= 140))
+        && data.source is string && data.source.size() <= 10 && (data.source == 'manual' || data.source == 'ai' || data.source == 'voice' || data.source == 'camera')
+        && data.status is string && data.status.size() <= 12 && (data.status == 'pending' || data.status == 'confirmed')
+        && data.occurredAtIso is string && data.occurredAtIso.size() >= 10 && data.occurredAtIso.size() <= 40
+        && (!('confidence' in data) || (data.confidence is number && data.confidence >= 0 && data.confidence <= 1))
+        && (!('transcript' in data) || (data.transcript is string && data.transcript.size() <= 500))
+        && (!('uncertainFields' in data) || (data.uncertainFields is list && data.uncertainFields.size() <= 4 && (data.uncertainFields.size() == 0 || data.uncertainFields[0] is string)))
+        && (!('sourceImageUrl' in data) || (data.sourceImageUrl is string && data.sourceImageUrl.size() <= 1024 && data.sourceImageUrl.matches('^(https://.+)?$')))
+        && (!('confirmedAt' in data) || (data.confirmedAt is string && data.confirmedAt.size() >= 10 && data.confirmedAt.size() <= 40))
+        && (!('editedFields' in data) || (data.editedFields is list && data.editedFields.size() <= 4 && (data.editedFields.size() == 0 || data.editedFields[0] is string)))
+        && (!('originalAIValue' in data) || isValidOriginalAIValue(data.originalAIValue))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /users/{uid} {
+      allow get: if isOwner(uid) && isValidId(uid);
+      allow list: if false;
+
+      allow create: if isVerifiedOwner(uid)
+        && isValidId(uid)
+        && isValidUserAccount(incoming(), uid)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedOwner(uid)
+        && isValidId(uid)
+        && isValidUserAccount(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update language preference
+          incoming().diff(existing()).affectedKeys().hasOnly(['language', 'updatedAt']) ||
+          // Action: Complete or reset onboarding status
+          incoming().diff(existing()).affectedKeys().hasOnly(['onboarded', 'language', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['onboarded', 'updatedAt'])
+        );
+
+      allow delete: if false;
+
+      // Private PII-isolated shop profile subcollection (doc id: 'main')
+      match /profile/{profileId} {
+        allow get: if isOwner(uid) && isValidId(uid) && isValidId(profileId);
+        allow list: if false;
+
+        allow create: if isVerifiedOwner(uid)
+          && isValidId(uid)
+          && isValidId(profileId)
+          && profileId == 'main'
+          && isValidShopProfile(incoming(), uid)
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && hasParentUser(uid);
+
+        allow update: if isVerifiedOwner(uid)
+          && isValidId(uid)
+          && isValidId(profileId)
+          && profileId == 'main'
+          && isValidShopProfile(incoming(), uid)
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && hasParentUser(uid)
+          && (
+            // Action: Update shop profile details
+            incoming().diff(existing()).affectedKeys().hasOnly(['shopName', 'ownerName', 'phone', 'language', 'onboarded', 'updatedAt']) ||
+            // Action: Switch language only
+            incoming().diff(existing()).affectedKeys().hasOnly(['language', 'updatedAt']) ||
+            // Action: Mark onboarded
+            incoming().diff(existing()).affectedKeys().hasOnly(['onboarded', 'updatedAt'])
+          );
+
+        allow delete: if false;
+      }
+
+      // Private shopkeeper sales, expenses, credit & payment ledger entries
+      match /entries/{entryId} {
+        allow get: if isOwner(uid) && isValidId(uid) && isValidId(entryId);
+        allow list: if isOwner(uid) && resource.data.ownerUid == request.auth.uid;
+
+        allow create: if isVerifiedOwner(uid)
+          && isValidId(uid)
+          && isValidId(entryId)
+          && isValidLedgerEntry(incoming(), uid)
+          && (incoming().source == 'manual' || incoming().status == 'pending')
+          && !(incoming().status == 'pending' && 'confirmedAt' in incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && hasParentUser(uid);
+
+        allow update: if isVerifiedOwner(uid)
+          && isValidId(uid)
+          && isValidId(entryId)
+          && isValidLedgerEntry(incoming(), uid)
+          && incoming().ownerUid == existing().ownerUid
+          && incoming().source == existing().source
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && hasParentUser(uid)
+          && !(existing().status == 'confirmed' && incoming().status != 'confirmed')
+          && (!('confirmedAt' in existing()) || incoming().confirmedAt == existing().confirmedAt)
+          && (!('editedFields' in existing()) || incoming().editedFields == existing().editedFields)
+          && (!('originalAIValue' in existing()) || incoming().originalAIValue == existing().originalAIValue)
+          && (
+            // Action: Explicitly confirm a pending AI/voice/camera entry — blocks missing or <= 0 amount and requires audit trail
+            (existing().status == 'pending'
+              && incoming().status == 'confirmed'
+              && incoming().amountPaise is int && incoming().amountPaise > 0
+              && 'confirmedAt' in incoming()
+              && 'editedFields' in incoming()
+              && 'originalAIValue' in incoming()
+              && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'customerName', 'type', 'amountPaise', 'note', 'uncertainFields', 'confirmedAt', 'editedFields', 'originalAIValue', 'updatedAt'])) ||
+            // Action: Edit a pending entry before confirming
+            (existing().status == 'pending' && incoming().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'customerPhone', 'type', 'amountPaise', 'note', 'occurredAtIso', 'uncertainFields', 'updatedAt'])) ||
+            // Action: Fill in missing amount on a manually confirmed expense
+            (existing().status == 'confirmed' && existing().type == 'expense' && existing().amountPaise == null && incoming().amountPaise is int && incoming().amountPaise > 0 && incoming().diff(existing()).affectedKeys().hasOnly(['amountPaise', 'updatedAt'])) ||
+            // Action: Update note or customer phone on a confirmed entry
+            (existing().status == 'confirmed' && incoming().status == 'confirmed' && incoming().diff(existing()).affectedKeys().hasOnly(['note', 'customerPhone', 'updatedAt']))
+          );
+
+        allow delete: if isVerifiedOwner(uid) && isValidId(uid) && isValidId(entryId) && existing().ownerUid == request.auth.uid && hasParentUser(uid);
+      }
+    }
+  }
+}

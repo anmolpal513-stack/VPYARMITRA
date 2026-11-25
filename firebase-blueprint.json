@@ -1,0 +1,254 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Top-level non-PII user account anchor document for VyaparMitra shopkeepers.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID matching the document ID."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["hi", "en"],
+          "description": "Preferred UI and TTS language."
+        },
+        "onboarded": {
+          "type": "boolean",
+          "description": "Whether the shopkeeper has completed onboarding."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when user account was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last update."
+        }
+      },
+      "required": ["uid", "language", "onboarded", "createdAt", "updatedAt"]
+    },
+    "ShopProfile": {
+      "title": "ShopProfile",
+      "description": "Private shopkeeper profile isolated under users/{uid}/profile/main containing shop name and optional PII.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner Firebase Auth UID."
+        },
+        "shopName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 50,
+          "description": "Registered Kirana shop name (2-50 characters)."
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50,
+          "description": "Optional shopkeeper full name."
+        },
+        "phone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20,
+          "pattern": "^(\\+?[0-9]{10,15})?$",
+          "description": "Optional verified or entered mobile phone number."
+        },
+        "language": {
+          "type": "string",
+          "enum": ["hi", "en"],
+          "description": "Selected app language (hi or en)."
+        },
+        "onboarded": {
+          "type": "boolean",
+          "description": "True once onboarding flow finishes."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when profile was last updated."
+        }
+      },
+      "required": ["uid", "shopName", "language", "onboarded", "createdAt", "updatedAt"]
+    },
+    "LedgerEntry": {
+      "title": "LedgerEntry",
+      "description": "Individual Kirana sale, expense, credit (udhaar), or payment (jama) entry stored in integer paise and ISO timestamps.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner Firebase Auth UID."
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Customer, supplier, or category display name."
+        },
+        "customerPhone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20,
+          "pattern": "^(\\+?[0-9]{10,15})?$",
+          "description": "Optional customer phone number for wa.me link."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["sale", "expense", "udhaar", "jama"],
+          "description": "sale = daily sales, expense = shop expense, udhaar = credit given, jama = payment received."
+        },
+        "amountPaise": {
+          "type": "integer",
+          "description": "Positive integer amount in paise (1 INR = 100 paise), or null only for expense entries awaiting amount entry."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 140,
+          "description": "Optional item list, receipt summary, or note."
+        },
+        "source": {
+          "type": "string",
+          "enum": ["manual", "ai", "voice", "camera"],
+          "description": "How the entry was captured. Non-manual entries must begin as status=pending."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "confirmed"],
+          "description": "AI/voice/camera entries start as pending and become confirmed only upon explicit shopkeeper confirmation."
+        },
+        "occurredAtIso": {
+          "type": "string",
+          "format": "date-time",
+          "minLength": 10,
+          "maxLength": 40,
+          "description": "ISO 8601 date-time string for the transaction."
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Optional AI/voice extraction confidence score between 0 and 1."
+        },
+        "transcript": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Optional verbatim Hindi/Hinglish voice transcript."
+        },
+        "uncertainFields": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "enum": ["customerName", "amount", "type", "note"]
+          },
+          "description": "Optional list of low-confidence fields requiring explicit user verification."
+        },
+        "sourceImageUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1024,
+          "pattern": "^(https://.+)?$",
+          "description": "Optional HTTPS link to the source register/bill photo in Firebase Storage."
+        },
+        "confirmedAt": {
+          "type": "string",
+          "format": "date-time",
+          "minLength": 10,
+          "maxLength": 40,
+          "description": "ISO 8601 timestamp recorded when the shopkeeper explicitly confirmed the entry."
+        },
+        "editedFields": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "string",
+            "enum": ["customerName", "type", "amountPaise", "note"]
+          },
+          "description": "Audit trail list of fields modified by the shopkeeper prior to confirmation."
+        },
+        "originalAIValue": {
+          "type": "object",
+          "description": "Immutable audit snapshot of original AI-extracted fields before shopkeeper confirmation.",
+          "properties": {
+            "customerName": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 60
+            },
+            "type": {
+              "type": "string",
+              "enum": ["sale", "expense", "udhaar", "jama"]
+            },
+            "amountPaise": {
+              "type": "integer",
+              "description": "Original AI integer paise amount, or null if missing/illegible."
+            },
+            "note": {
+              "type": "string",
+              "minLength": 0,
+              "maxLength": 140
+            }
+          },
+          "required": ["customerName", "type", "amountPaise", "note"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "ownerUid",
+        "customerName",
+        "type",
+        "amountPaise",
+        "source",
+        "status",
+        "occurredAtIso",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Parent user account anchor document for each VyaparMitra shopkeeper."
+    },
+    "/users/{uid}/profile/{profileId}": {
+      "schema": { "$ref": "#/entities/ShopProfile" },
+      "description": "Shopkeeper onboarding profile (document ID 'main') with shopName, language, onboarded flag, and optional PII."
+    },
+    "/users/{uid}/entries/{entryId}": {
+      "schema": { "$ref": "#/entities/LedgerEntry" },
+      "description": "Shopkeeper's private Kirana sales, expenses, credit, and payment entries stored in integer paise."
+    }
+  }
+}
